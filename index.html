@@ -89,13 +89,18 @@ body.touch #touch{display:block}
 .tbtn:active,.tbtn.on{background:radial-gradient(circle at 40% 35%,rgba(255,150,80,.6),rgba(150,50,25,.6))}
 #btnFire{right:calc(16px + env(safe-area-inset-right));
   bottom:calc(26px + env(safe-area-inset-bottom));width:104px;height:104px;font-size:30px}
-#btnUse{right:calc(128px + env(safe-area-inset-right));
-  bottom:calc(96px + env(safe-area-inset-bottom));width:62px;height:62px;font-size:11px}
-#wpnRow{position:absolute;right:calc(10px + env(safe-area-inset-right));
-  top:calc(112px + env(safe-area-inset-top));display:flex;flex-direction:column;gap:5px}
-.wb{width:34px;height:28px;border-radius:7px;border:1px solid rgba(200,90,40,.3);
-  background:rgba(20,12,10,.8);color:#8d7566;font-size:9px;font-weight:900;
-  display:flex;align-items:center;justify-content:center;flex-direction:column;line-height:1.1}
+#btnUse{right:calc(132px + env(safe-area-inset-right));
+  bottom:calc(112px + env(safe-area-inset-bottom));width:60px;height:60px;font-size:10.5px}
+#wpnRow{position:absolute;left:calc(10px + env(safe-area-inset-left));
+  right:calc(10px + env(safe-area-inset-right));
+  bottom:calc(182px + env(safe-area-inset-bottom));
+  display:flex;flex-direction:row;gap:4px;
+  justify-content:center;flex-wrap:nowrap}
+.wb{flex:1 1 0;min-width:0;max-width:44px;height:30px;
+  border-radius:8px;border:1px solid rgba(200,90,40,.3);
+  background:rgba(20,12,10,.86);color:#8d7566;font-size:8.5px;font-weight:900;
+  display:flex;align-items:center;justify-content:center;flex-direction:column;
+  line-height:1.05;backdrop-filter:blur(2px)}
 .wb.have{color:#e8bb8a;border-color:rgba(230,140,80,.5)}
 .wb.on{background:linear-gradient(180deg,#d2662c,#8e3d16);color:#fff;border-color:#ffb072}
 .wb i{font-style:normal;font-size:12px}
@@ -179,6 +184,29 @@ h2{font-size:clamp(20px,6vw,29px);font-weight:900;color:#f6e2cf;letter-spacing:1
   #mm{width:104px;height:104px}
   .hs b{font-size:22px}
   #face{width:44px;height:44px}
+}
+@media(max-height:560px){
+  #wpnRow{bottom:calc(150px + env(safe-area-inset-bottom))}
+  .wb{width:32px;height:26px;font-size:8px}
+}
+/* узкие телефоны: ряд оружия выше кнопок и компактнее */
+@media(max-width:379px){
+  #wpnRow{bottom:calc(168px + env(safe-area-inset-bottom));gap:3px}
+  .wb{height:26px;font-size:7.5px;max-width:38px}
+  .wb i{font-size:10px}
+  #btnFire{width:88px;height:88px;font-size:26px}
+  #btnUse{width:54px;height:54px;font-size:9.5px;
+    right:calc(112px + env(safe-area-inset-right));
+    bottom:calc(102px + env(safe-area-inset-bottom))}
+  #stick{width:104px;height:104px}
+}
+/* ландшафт: высоты мало — ряд оружия уводим вбок, к центру-низу */
+@media(max-height:470px) and (min-width:600px){
+  #wpnRow{left:auto;right:auto;
+    left:50%;transform:translateX(-50%);
+    bottom:calc(8px + env(safe-area-inset-bottom));
+    max-width:280px}
+  .wb{height:26px;font-size:7.5px;max-width:40px}
 }
 @media(max-height:430px){
   #stick{width:92px;height:92px}
@@ -2408,7 +2436,17 @@ var mouseLook=false;
 var touchOn=('ontouchstart' in window)||navigator.maxTouchPoints>0;
 if(touchOn)document.body.classList.add('touch');
 
+/* Итоговый ввод. Складывается из двух независимых источников,
+   иначе один затирает другой (клавиатура обнуляла джойстик). */
 var IN={fwd:0,strafe:0,turn:0,fire:0,use:0};
+var KB={fwd:0,strafe:0,turn:0,fire:0};   /* клавиатура + мышь */
+var TC={fwd:0,strafe:0,fire:0};          /* сенсор */
+function mixInput(){
+  IN.fwd=clamp(KB.fwd+TC.fwd,-1,1);
+  IN.strafe=clamp(KB.strafe+TC.strafe,-1,1);
+  IN.turn=KB.turn;
+  IN.fire=(KB.fire||TC.fire)?1:0;
+}
 
 document.addEventListener('keydown',function(e){
   var k=e.key.toLowerCase();
@@ -2444,17 +2482,18 @@ function readKeys(){
   if(keys['d']||keys['в'])s+=1;
   if(keys['arrowleft'])t-=1;
   if(keys['arrowright'])t+=1;
-  IN.fwd=f;IN.strafe=s;IN.turn=t;
-  IN.fire=(keys['Space']||keys['control']||keys['Control']||mouseDown)?1:IN.fire;
+  KB.fwd=f;KB.strafe=s;KB.turn=t;
+  KB.fire=(keys[' ']||keys['Space']||keys['control']||mouseDown)?1:0;
+  mixInput();
 }
 /* мышь */
 var mouseDown=false;
 cv.addEventListener('mousedown',function(e){
   if(G.state!=='play')return;
-  audioWake();mouseDown=true;IN.fire=1;
+  audioWake();mouseDown=true;KB.fire=1;mixInput();
   if(!mouseLook&&cv.requestPointerLock){cv.requestPointerLock();}
 });
-document.addEventListener('mouseup',function(){mouseDown=false;IN.fire=0;});
+document.addEventListener('mouseup',function(){mouseDown=false;KB.fire=0;mixInput();});
 document.addEventListener('pointerlockchange',function(){
   mouseLook=(document.pointerLockElement===cv);
 });
@@ -2469,80 +2508,97 @@ document.addEventListener('wheel',function(e){
   cycleWpn(e.deltaY>0?1:-1);
 },{passive:true});
 
-/* ---------- Сенсор: джойстик + свайп-обзор ---------- */
-var stickId=null,stickCX=0,stickCY=0,lookId=null,lookX=0,lookY=0;
+/* ---------- Сенсор: джойстик + свайп-обзор ----------
+   Используем Pointer Events: один код на тач, мышь и стилус.
+   Каждый палец отслеживается по pointerId. */
+var stickId=null,stickCX=0,stickCY=0,stickR=52;
+var lookId=null,lookX=0,lookY=0;
 var stickEl=$('stick'),knob=$('knob');
-function stickStart(e){
-  var t=e.changedTouches?e.changedTouches[0]:e;
+
+function stickSet(cx,cy){
+  var dx=cx-stickCX, dy=cy-stickCY;
+  var d=Math.hypot(dx,dy);
+  if(d>stickR){dx=dx/d*stickR;dy=dy/d*stickR;}
+  knob.style.transform='translate('+dx+'px,'+dy+'px)';
+  /* мёртвая зона, чтобы не дёргался от касания */
+  var nx=dx/stickR, ny=dy/stickR;
+  if(Math.abs(nx)<0.16)nx=0;
+  if(Math.abs(ny)<0.16)ny=0;
+  TC.strafe=clamp(nx,-1,1);
+  TC.fwd=clamp(-ny,-1,1);
+  mixInput();
+}
+function stickReset(){
+  stickId=null;TC.fwd=0;TC.strafe=0;
+  knob.style.transform='';
+  mixInput();
+}
+stickEl.addEventListener('pointerdown',function(e){
+  e.preventDefault();e.stopPropagation();
+  audioWake();
+  if(stickId!==null)return;
+  stickId=e.pointerId;
   var r=stickEl.getBoundingClientRect();
   stickCX=r.left+r.width/2;stickCY=r.top+r.height/2;
-  stickId=t.identifier===undefined?'m':t.identifier;
-  stickMove(e);
+  stickR=r.width*0.44;
+  if(stickEl.setPointerCapture)try{stickEl.setPointerCapture(e.pointerId);}catch(err){}
+  stickSet(e.clientX,e.clientY);
+},{passive:false});
+stickEl.addEventListener('pointermove',function(e){
+  if(e.pointerId!==stickId)return;
+  e.preventDefault();
+  stickSet(e.clientX,e.clientY);
+},{passive:false});
+function stickUp(e){
+  if(e.pointerId!==stickId)return;
+  stickReset();
 }
-function stickMove(e){
-  var list=e.changedTouches||[e];
-  for(var i=0;i<list.length;i++){
-    var t=list[i];
-    var id=t.identifier===undefined?'m':t.identifier;
-    if(id!==stickId)continue;
-    var dx=t.clientX-stickCX,dy=t.clientY-stickCY;
-    var d=Math.hypot(dx,dy),max=52;
-    if(d>max){dx=dx/d*max;dy=dy/d*max;}
-    knob.style.transform='translate('+dx+'px,'+dy+'px)';
-    IN.strafe=clamp(dx/max,-1,1);
-    IN.fwd=clamp(-dy/max,-1,1);
-  }
-}
-function stickEnd(e){
-  var list=e.changedTouches||[e];
-  for(var i=0;i<list.length;i++){
-    var id=list[i].identifier===undefined?'m':list[i].identifier;
-    if(id===stickId){
-      stickId=null;IN.fwd=0;IN.strafe=0;
-      knob.style.transform='';
-    }
-  }
-}
-stickEl.addEventListener('touchstart',function(e){e.preventDefault();audioWake();stickStart(e);},{passive:false});
-stickEl.addEventListener('touchmove',function(e){e.preventDefault();stickMove(e);},{passive:false});
-stickEl.addEventListener('touchend',stickEnd);
-stickEl.addEventListener('touchcancel',stickEnd);
+stickEl.addEventListener('pointerup',stickUp);
+stickEl.addEventListener('pointercancel',stickUp);
+stickEl.addEventListener('lostpointercapture',stickUp);
 
-/* свайп по экрану — обзор */
-$('touch').addEventListener('touchstart',function(e){
+/* свайп по свободной части экрана — обзор */
+$('touch').addEventListener('pointerdown',function(e){
   audioWake();
-  for(var i=0;i<e.changedTouches.length;i++){
-    var t=e.changedTouches[i];
-    if(t.clientX<window.innerWidth*0.42&&t.clientY>window.innerHeight*0.5)continue;
-    if(lookId===null){lookId=t.identifier;lookX=t.clientX;lookY=t.clientY;}
-  }
+  if(e.pointerId===stickId)return;
+  /* нижний левый угол отдан джойстику */
+  if(e.clientX<window.innerWidth*0.44&&e.clientY>window.innerHeight*0.52)return;
+  if(lookId===null){lookId=e.pointerId;lookX=e.clientX;lookY=e.clientY;}
 },{passive:true});
-$('touch').addEventListener('touchmove',function(e){
-  if(G.state!=='play')return;
-  for(var i=0;i<e.changedTouches.length;i++){
-    var t=e.changedTouches[i];
-    if(t.identifier!==lookId)continue;
-    var dx=t.clientX-lookX,dy=t.clientY-lookY;
-    lookX=t.clientX;lookY=t.clientY;
-    G.pl.a=angNorm(G.pl.a+dx*0.0055);
-    G.pl.pitch=clamp(G.pl.pitch-dy*1.5,-VH*0.30,VH*0.30);
-  }
+$('touch').addEventListener('pointermove',function(e){
+  if(e.pointerId!==lookId||G.state!=='play')return;
+  var dx=e.clientX-lookX, dy=e.clientY-lookY;
+  lookX=e.clientX;lookY=e.clientY;
+  G.pl.a=angNorm(G.pl.a+dx*0.0055);
+  G.pl.pitch=clamp(G.pl.pitch-dy*1.5,-VH*0.30,VH*0.30);
 },{passive:true});
-$('touch').addEventListener('touchend',function(e){
-  for(var i=0;i<e.changedTouches.length;i++)
-    if(e.changedTouches[i].identifier===lookId)lookId=null;
-},{passive:true});
+function lookUp(e){if(e.pointerId===lookId)lookId=null;}
+$('touch').addEventListener('pointerup',lookUp,{passive:true});
+$('touch').addEventListener('pointercancel',lookUp,{passive:true});
 
 /* кнопки */
 function bindHold(el,on,off){
-  el.addEventListener('touchstart',function(e){e.preventDefault();audioWake();on();},{passive:false});
-  el.addEventListener('touchend',function(e){e.preventDefault();off&&off();},{passive:false});
-  el.addEventListener('touchcancel',function(){off&&off();});
-  el.addEventListener('mousedown',function(e){e.preventDefault();audioWake();on();});
-  el.addEventListener('mouseup',function(){off&&off();});
-  el.addEventListener('mouseleave',function(){off&&off();});
+  var id=null;
+  el.addEventListener('pointerdown',function(e){
+    e.preventDefault();e.stopPropagation();
+    audioWake();
+    if(id!==null)return;
+    id=e.pointerId;
+    if(el.setPointerCapture)try{el.setPointerCapture(e.pointerId);}catch(err){}
+    el.classList.add('on');
+    on();
+  },{passive:false});
+  function up(e){
+    if(e.pointerId!==id)return;
+    id=null;el.classList.remove('on');
+    off&&off();
+  }
+  el.addEventListener('pointerup',up);
+  el.addEventListener('pointercancel',up);
+  el.addEventListener('lostpointercapture',up);
 }
-bindHold($('btnFire'),function(){IN.fire=1;},function(){IN.fire=0;});
+bindHold($('btnFire'),function(){TC.fire=1;mixInput();},
+                      function(){TC.fire=0;mixInput();});
 bindHold($('btnUse'),function(){doUse();},null);
 
 function paintWpnRow(){
@@ -2553,15 +2609,24 @@ function paintWpnRow(){
     b.className='wb have'+(G.wpn===i?' on':'');
     var ic=['👊','🔫','💥','⚙️','⚡','🚀'][i];
     b.innerHTML='<i>'+ic+'</i>'+(i+1);
-    b.addEventListener('touchstart',function(e){
-      e.preventDefault();e.stopPropagation();switchWpn(i);},{passive:false});
-    b.addEventListener('mousedown',function(e){
-      e.preventDefault();e.stopPropagation();switchWpn(i);});
+    b.addEventListener('pointerdown',function(e){
+      e.preventDefault();e.stopPropagation();audioWake();switchWpn(i);},{passive:false});
     row.appendChild(b);
   });
 }
 
 /* ---------- Использовать: двери, переключатели, секретки ---------- */
+/* Полный сброс ввода — вызывается при паузе, смерти, смене экрана.
+   Без этого палец «залипает» и герой продолжает идти. */
+function resetInput(){
+  KB.fwd=KB.strafe=KB.turn=KB.fire=0;
+  TC.fwd=TC.strafe=TC.fire=0;
+  stickId=null;lookId=null;mouseDown=false;
+  keys={};
+  if(knob)knob.style.transform='';
+  var fb=$('btnFire');if(fb)fb.classList.remove('on');
+  mixInput();
+}
 function doUse(){
   if(G.state!=='play')return;
   var pl=G.pl;
@@ -3194,6 +3259,7 @@ function startLevel(li,keepStuff){
   document.body.classList.toggle('boss',!!G.boss);
   if(G.boss)$('bossName').textContent='КИБЕРДЕМОН';
   G.state='play';
+  resetInput();
   showScr('');
   paintHud();paintKeys();paintWpnRow();
   resize();
@@ -3205,7 +3271,7 @@ function startLevel(li,keepStuff){
 function pauseGame(){
   if(G.state!=='play')return;
   G.state='pause';
-  IN.fire=0;IN.fwd=0;IN.strafe=0;
+  resetInput();
   if(document.exitPointerLock)document.exitPointerLock();
   musStop();
   $('pauseStats').innerHTML=
@@ -3223,7 +3289,7 @@ function resumeGame(){
   musStart(G.lvl);
 }
 function quitToMenu(){
-  G.state='menu';musStop();
+  G.state='menu';musStop();resetInput();
   $('bossBar').classList.remove('on');
   paintMeta();showScr('intro');
 }
@@ -3238,7 +3304,7 @@ function playerDie(){
   G.state='dead';
   P.deaths++;
   musStop();sfx('die');
-  IN.fire=0;
+  resetInput();
   if(document.exitPointerLock)document.exitPointerLock();
   $('deadTtl').textContent=['ВЫ ПОГИБЛИ','РАЗОРВАН НА ЧАСТИ','КОНЕЦ ЗАЧИСТКИ'][ri(0,2)];
   $('deadStats').innerHTML=
@@ -3288,7 +3354,7 @@ function accPct(){
 function finishLevel(){
   if(G.state!=='play')return;
   G.state='win';
-  musStop();sfx('win');
+  musStop();sfx('win');resetInput();
   if(document.exitPointerLock)document.exitPointerLock();
 
   var L=LEVELS[G.lvl];
@@ -3490,6 +3556,8 @@ window.__G={G:G,P:P,M:M,LEVELS:LEVELS,DIFFS:DIFFS,MOBS:MOBS,WEAPONS:WEAPONS,
   save:save,mkEnemy:mkEnemy,entAt:entAt,newPlayer:newPlayer,
   movePlayer:movePlayer,updateEnts:updateEnts,updateProjs:updateProjs,
   blocked:blocked,accPct:accPct,fmtTime:fmtTime,A:A,IN:IN,
+  KB:KB,TC:TC,mixInput:mixInput,resetInput:resetInput,readKeys:readKeys,
+  paintWpnRow:paintWpnRow,cycleWpn:cycleWpn,
   get VW(){return VW;},get VH(){return VH;},
   setState:function(s){G.state=s;},
   boot:boot};
