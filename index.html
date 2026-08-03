@@ -25,9 +25,26 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
   box-shadow:0 0 4px rgba(0,0,0,.9)}
 
 /* ---------- HUD ---------- */
-#hud{position:absolute;inset:0;z-index:6;pointer-events:none;
+/* z-index 8 — выше сенсорного слоя #touch (7): сам HUD событий не
+   ловит (pointer-events:none), но кнопка паузы внутри должна нажиматься. */
+#hud{position:absolute;inset:0;z-index:8;pointer-events:none;
   padding:calc(6px + env(safe-area-inset-top)) 8px 0}
 #hudTop{display:flex;align-items:flex-start;gap:7px}
+/* Кнопка паузы — единственный путь в главное меню на телефоне.
+   z-index выше сенсорного слоя #touch (7), иначе тап уходит
+   в управление обзором и пауза не срабатывает. */
+#pauseBtn{
+  position:relative;z-index:9;
+  pointer-events:auto;flex:0 0 auto;margin-left:6px;
+  width:40px;height:40px;border-radius:11px;cursor:pointer;
+  border:1px solid rgba(200,90,40,.42);
+  background:linear-gradient(180deg,rgba(38,20,16,.92),rgba(16,9,9,.94));
+  color:#ffb454;font:900 15px/1 inherit;letter-spacing:1px;
+  display:none;align-items:center;justify-content:center;
+  box-shadow:0 2px 8px rgba(0,0,0,.5);backdrop-filter:blur(3px);
+}
+#pauseBtn.show{display:flex}
+#pauseBtn:active{transform:translateY(2px)}
 .hs{background:linear-gradient(180deg,rgba(28,16,14,.86),rgba(14,8,8,.88));
   border:1px solid rgba(200,90,40,.34);border-radius:8px;padding:4px 8px;min-width:56px;
   text-align:center;backdrop-filter:blur(3px)}
@@ -502,6 +519,9 @@ h2{letter-spacing:-.5px !important;font-weight:900 !important}
           <div class="key" id="keyY"></div>
         </div>
       </div>
+      <!-- Пауза доступна с телефона: клавиши Esc там нет,
+           а без неё некуда выйти в главное меню. -->
+      <button id="pauseBtn" aria-label="Пауза">II</button>
     </div>
     <div id="msg"></div>
     <div id="bossBar"><div class="lb" id="bossName">БОСС</div>
@@ -554,6 +574,7 @@ h2{letter-spacing:-.5px !important;font-weight:900 !important}
     <button class="btn g" id="contBtn">ПРОДОЛЖИТЬ</button>
     <div class="rw">
       <button class="btn sm" id="sndBtn2">🔊 Звук</button>
+      <button class="btn sm vibBtn" id="vibBtn">Вибрация: вкл</button>
       <button class="btn sm" id="qualBtn">⚙️ Качество</button>
       <button class="btn sm" id="quitBtn">Выйти в меню</button>
     </div>
@@ -823,7 +844,40 @@ function vkInit(){
     }).catch(nop);
   }catch(e){}
 }
+
+/* ---------- вибрация: пользователь может выключить ----------
+   Требование модерации ВК: на мобильных устройствах должна быть
+   возможность отключить вибрацию. Выбор запоминается отдельно от
+   игрового сохранения, поэтому переживает сброс прогресса. */
+var VIB_KEY='vib_off_v1';
+function vibOn(){
+  try{return localStorage.getItem(VIB_KEY)!=='1';}catch(e){return true;}
+}
+function setVib(on){
+  try{
+    if(on)localStorage.removeItem(VIB_KEY);
+    else localStorage.setItem(VIB_KEY,'1');
+  }catch(e){}
+}
+function toggleVib(){
+  var on=!vibOn();
+  setVib(on);
+  paintVibBtns();
+  if(on&&navigator.vibrate)navigator.vibrate(12);
+  if(typeof toast==='function')toast(on?'Вибрация включена':'Вибрация выключена');
+  return on;
+}
+function paintVibBtns(){
+  var on=vibOn();
+  var list=document.querySelectorAll('.vibBtn');
+  for(var i=0;i<list.length;i++){
+    list[i].textContent=on?'Вибрация: вкл':'Вибрация: выкл';
+    list[i].setAttribute('aria-pressed',on?'true':'false');
+  }
+}
+
 function haptic(s){
+  if(!vibOn())return;
   if(VK.ready)bridge.send('VKWebAppTapticImpactOccurred',{style:s||'light'}).catch(nop);
   else if(navigator.vibrate)navigator.vibrate(s==='heavy'?26:s==='medium'?14:6);
 }
@@ -852,6 +906,43 @@ function joinGroup(){
 }
 
 
+
+/* ---------- ссылка на само приложение ----------
+   Модерация ВК: «в шеринге ссылка на сторонний ресурс». Раньше уходил
+   location.href — адрес хостинга, для ВК это внешний сайт. Собираем
+   внутреннюю ссылку vk.com/app<id> из параметров запуска. Если id
+   неизвестен (открыто вне ВК), ссылку не прикладываем совсем. */
+var VK_APP_ID='';
+(function(){
+  try{
+    var q=new URLSearchParams(location.search);
+    var id=q.get('vk_app_id')||'';
+    if(!id&&location.hash){
+      var h=new URLSearchParams(location.hash.replace(/^#/,''));
+      id=h.get('vk_app_id')||'';
+    }
+    if(/^\d+$/.test(id))VK_APP_ID=id;
+  }catch(e){}
+})();
+function vkAppLink(){
+  return VK_APP_ID?('https://vk.com/app'+VK_APP_ID):'';
+}
+
+/* Вне ВКонтакте: отдаём текст со ссылкой на приложение, если она
+   известна. Адрес хостинга наружу не уходит. */
+function shareText(t){
+  var l=vkAppLink();
+  return l?(t+' '+l):t;
+}
+function shareOut(t){
+  var l=vkAppLink();
+  var d={text:t};
+  if(l)d.url=l;
+  if(navigator.share){navigator.share(d).catch(function(){});return;}
+  try{navigator.clipboard.writeText(shareText(t));}catch(e){}
+}
+
+
 /* ---------- поделиться результатом ----------
    Старый метод постинга на стену ВК отключил,
    и модерация браковала приложения за его вызов. Теперь:
@@ -863,9 +954,10 @@ function shareStory(text,link){
   try{
     bridge.send('VKWebAppShowStoryBox',{
       background_type:'none',
-      attachment:{text:'open',type:'url',url:link||location.href}
+      attachment:{text:'open',type:'url',url:link||vkAppLink()}
     }).catch(function(){
-      bridge.send('VKWebAppShare',{link:link||location.href}).catch(nop);
+      var _l=link||vkAppLink();
+      if(_l)bridge.send('VKWebAppShare',{link:_l}).catch(nop);
     });
     return true;
   }catch(e){return false;}
@@ -875,9 +967,9 @@ function share(txt){
   var t=txt||('Зачистил '+P.cleared+' секторов в «МЯСОРУБКЕ» 👹 '+fnum(P.totalScore)+
     ' очков, '+fnum(P.kills)+' фрагов. Продержишься дольше?');
   if(VK.ready){
-    shareStory(t,location.href);
-  }else if(navigator.share){navigator.share({text:t,url:location.href}).catch(nop);}
-  else{try{navigator.clipboard.writeText(t+' '+location.href);toast('📋 Скопировано');}
+    shareStory(t,vkAppLink());
+  }else if(navigator.share){shareOut(t);}
+  else{try{navigator.clipboard.writeText(shareText(t));toast('📋 Скопировано');}
        catch(e){toast(t);}}
 }
 var adBusy=false;
@@ -3563,6 +3655,7 @@ function startLevel(li,keepStuff){
   G.state='play';
   resetInput();
   showScr('');
+  $('pauseBtn').classList.add('show');
   paintHud();paintKeys();paintWpnRow();
   resize();
   musStart(li);
@@ -3582,16 +3675,20 @@ function pauseGame(){
     '<div class="stb"><b>'+fnum(G.score)+'</b><span>очков</span></div>'+
     '<div class="stb"><b>'+fmtTime(G.levelTime)+'</b><span>время</span></div>';
   $('sndBtn2').textContent=P.snd?'🔊 Звук':'🔇 Звук';
+  paintVibBtns();
   $('qualBtn').textContent='⚙️ '+['Низкое','Среднее','Высокое'][P.quality|0];
+  $('pauseBtn').classList.remove('show');
   showScr('pauseScr');
 }
 function resumeGame(){
   if(G.state!=='pause')return;
   G.state='play';showScr('');
+  $('pauseBtn').classList.add('show');
   musStart(G.lvl);
 }
 function quitToMenu(){
   G.state='menu';musStop();resetInput();
+  $('pauseBtn').classList.remove('show');
   $('bossBar').classList.remove('on');
   paintMeta();showScr('intro');
 }
@@ -3767,7 +3864,19 @@ $('stShare').onclick=function(){sfx('click');share();};
 $('stLb').onclick=function(){sfx('click');joinGroup();};
 $('contBtn').onclick=function(){sfx('click');resumeGame();};
 $('quitBtn').onclick=function(){sfx('click');quitToMenu();};
+/* Пауза с телефона. Гасим событие на pointerdown, иначе тап
+   проваливается в игровой слой и превращается в выстрел. */
+(function(){
+  var pb=$('pauseBtn');
+  if(!pb)return;
+  pb.addEventListener('pointerdown',function(e){
+    e.preventDefault();e.stopPropagation();
+    sfx('click');pauseGame();
+  },{passive:false});
+  pb.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();});
+})();
 $('sndBtn2').onclick=function(){toggleSnd();};
+$('vibBtn').onclick=function(){sfx('click');toggleVib();};
 $('qualBtn').onclick=function(){
   P.quality=((P.quality|0)+1)%3;save();resize();
   $('qualBtn').textContent='⚙️ '+['Низкое','Среднее','Высокое'][P.quality];
@@ -3865,6 +3974,15 @@ window.__G={G:G,P:P,M:M,LEVELS:LEVELS,DIFFS:DIFFS,MOBS:MOBS,WEAPONS:WEAPONS,
   boot:boot};
 
 boot();
+
+/* Экспорт для автопроверки требований модерации (не влияет на игру) */
+try{window.__MOD={
+  link:function(){return typeof vkAppLink==='function'?vkAppLink():null;},
+  vibOn:function(){return typeof vibOn==='function'?vibOn():null;},
+  toggleVib:function(){return typeof toggleVib==='function'?toggleVib():null;},
+  haptic:function(s){if(typeof haptic==='function')haptic(s);}
+};}catch(e){}
+
 })();
 </script>
 </body>
